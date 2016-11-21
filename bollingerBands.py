@@ -44,14 +44,14 @@ dstd = pd.rolling_std(df['Daily Returns'],window)
 dupperBand = dmean+band_length*dstd
 dlowerBand = dmean-band_length*dstd
 
-# p
+# Plotting
 datemin = datetime.datetime(2016,start.month+1,1)
 datemax = end
 name = 'Adj Close'
 plt.figure(figsize=(20,20))
 plt.subplot(2,1,1)
 plt.plot(df[name],color='k', ls = 'solid')
-plt.plot(mean,color='r', label='Moving Average',linestyle = '-', lineweight = 3)
+plt.plot(mean,color='r', label='Moving Average',linestyle = '-', linewidth = 3)
 plt.plot(upperBand, color='b', label = 'Lower Band', linestyle = 'dotted', linewidth = 2)
 plt.plot(lowerBand, color='b', label = 'Upper Band', linestyle = 'dotted', lw = 3)
 plt.ylabel('Adj. Close')
@@ -61,7 +61,7 @@ plt.legend(loc=1)
 
 plt.subplot(2,1,2)
 plt.plot(df['Daily Returns'], color='k')
-plt.plot(dmean,color='r', label='Moving Average',linestyle = '-', lineweight = 3)
+plt.plot(dmean,color='r', label='Moving Average',linestyle = '-', linewidth = 3)
 plt.plot(dupperBand, color='b', label = 'Lower Band', linestyle = 'dotted', linewidth = 2)
 plt.plot(dlowerBand, color='b', label = 'Upper Band', linestyle = 'dotted', lw = 3)
 plt.xlim(datemin,datemax)
