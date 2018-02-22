@@ -6,6 +6,11 @@ import numpy as np
 
 class rnn_network():
     def __init__(self, serie, num_steps, window):
+        """
+        window: Amount of days to use in one prediction
+        num_steps: The length of the unrolled network
+        serie: Pandas serie of data
+        """
         self.serie = serie
         self.num_steps = num_steps
         self.window = window
@@ -21,9 +26,9 @@ class rnn_network():
             batch = self.serie[start_index:].reshape(-1, self.window)
         # TODO: Remove starting dates to get full batches
         X, y = [], []
-        for i in range(0, len(batch), self.num_steps):
-            if (i + self.num_steps+ 1) > len(batch):
-                break
+        for i in range(0, len(batch) - self.num_steps):
+            #if (i + self.num_steps+ 1) > len(batch):
+            #    break
             X.append(batch[i: i + self.num_steps])
             y.append(batch[i + self.num_steps])
 
@@ -33,30 +38,29 @@ class rnn_network():
         _, X, y = self.get_batch()
         idx = int(np.round(len(X) * (1 - split)))
         X_train, X_test, y_train, y_test = X[:idx], X[idx:], y[:idx], y[idx:]
-
-        X_train = np.expand_dims(X_train, 0)
+        
+        #X_train = np.expand_dims(X_train, 0)
         
         return (X_train, X_test, y_train, y_test)
 
     def input_tensors(self):
-        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.window, self.num_steps])
+        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.num_steps, self.window])
         targets = tf.placeholder(dtype=tf.float32, shape=[None, self.window])
         learning_rate = tf.placeholder(tf.float32, name='learning_rate')
         return inputs, targets, learning_rate
         
     
     def rnn_cell(self, units, layers):
-        cell = tf.nn.rnn_cell.BasicLSTMCell(units)
+        cell = tf.contrib.rnn.LSTMCell(units)
         cell = tf.contrib.rnn.MultiRNNCell([cell] * layers)
-        initial_state = cell.zero_state(self.num_steps, dtype=tf.int32)
+        initial_state = cell.zero_state(32, dtype=tf.int32)
         return cell, initial_state
     
     def model(self, inputs, units=32, layers=1):
         cell, initial_state = self.rnn_cell(units, layers)
-        import pdb; pdb.set_trace()
-        output, final_state = tf.nn.dynamic_rnn(cell, inputs, initial_state)
+        output, final_state = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
         with tf.variable_scope('fc1'):
-            fc1 = tf.contrib.full_connected(output, window, activation_fn=None)
+            fc1 = tf.contrib.layers.fully_connected(output[-1], self.window, activation_fn=None)
         prediction = fc1
         return prediction, final_state
 
@@ -64,10 +68,12 @@ class rnn_network():
         with tf.Graph().as_default():
             inputs, targets, learning_rate = self.input_tensors()
             prediction, final_state = self.model(inputs)
-            optimizer = tf.tain.AdamOptimizer(learning_rate)
+            optimizer = tf.train.AdamOptimizer(learning_rate)
             loss = tf.reduce_mean(tf.square(tf.subtract(prediction, targets)))
+            
             gradients = optimizer.compute_gradients(loss)
-            clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad, val in gradients]
+            clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients]
+            import pdb; pdb.set_trace()
             train_optimizer = optimizer.apply_gradients(clipped_gradients)
         return loss, train_optimizer
 
@@ -75,11 +81,15 @@ class rnn_network():
         for i in range(0, len(X), batch_size):
             yield X[i:i + batch_size], y[i:i + batch_size]
 
+    def normalize(X, y):
+        return X/X.max()
+        
     def train(self, epochs, lr, verbose=5):
         X_train, X_test, y_train, y_test = self.get_train_test()
         loss, train_optimizer = self.default_graph()
         # TODO: Add batching
         with tf.Session() as sess:
+            sess.run(tf.global_variables_initializer())
             for epoch in epochs:
                 for X, y in self.batch_generator(X_tain, y_train):
                     loss, _ = sess.run([loss, train_optimizer], feed_dict={inputs: X, targets: y, learning_rate: lr})
