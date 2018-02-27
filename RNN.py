@@ -5,25 +5,25 @@ import tensorflow as tf
 import numpy as np
 
 class rnn_network():
-    def __init__(self, serie, num_steps, window):
+    def __init__(self, serie, num_steps, input_size):
         """
-        window: Amount of days to use in one prediction
+        input_size: Amount of days to use in one prediction
         num_steps: The length of the unrolled network
         serie: Pandas serie of data
         """
         self.serie = serie
         self.num_steps = num_steps
-        self.window = window
+        self.input_size = input_size
 
     def get_batch(self):
         # TODO: Add feature to over lap days
-        start_index = len(self.serie) % self.window
+        start_index = len(self.serie) % self.input_size
 
         if not start_index:
-            batch = self.serie.reshape(-1, self.window)
+            batch = self.serie.reshape(-1, self.input_size)
         else:
-            # If a multiple of window is not len(serie) chop off from the start
-            batch = self.serie[start_index:].reshape(-1, self.window)
+            # If a multiple of input_size is not len(serie) chop off from the start
+            batch = self.serie[start_index:].reshape(-1, self.input_size)
         # TODO: Remove starting dates to get full batches
         X, y = [], []
         for i in range(0, len(batch) - self.num_steps):
@@ -34,66 +34,75 @@ class rnn_network():
 
         return (batch, np.array(X), np.array(y))
 
+    def batch_generator(self, batch_X, batch_y, batch_size=32):
+        for i in range(0, len(batch_X), batch_size):
+            yield batch_X[i:i + batch_size], batch_y[i:i + batch_size]
+
     def get_train_test(self, split=0.1):
         _, X, y = self.get_batch()
         idx = int(np.round(len(X) * (1 - split)))
         X_train, X_test, y_train, y_test = X[:idx], X[idx:], y[:idx], y[idx:]
-        
-        #X_train = np.expand_dims(X_train, 0)
-        
         return (X_train, X_test, y_train, y_test)
 
     def input_tensors(self):
-        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.num_steps, self.window])
-        targets = tf.placeholder(dtype=tf.float32, shape=[None, self.window])
+        inputs = tf.placeholder(dtype=tf.float32, shape=[None, self.num_steps, self.input_size], name='inputs')
+        targets = tf.placeholder(dtype=tf.float32, shape=[None, self.input_size], name='targets')
         learning_rate = tf.placeholder(tf.float32, name='learning_rate')
-        return inputs, targets, learning_rate
+        keep_prob = tf.placeholder(tf.float32, name='keep_prob')
+        return inputs, targets, learning_rate, keep_prob
         
-    
-    def rnn_cell(self, units, layers):
-        cell = tf.contrib.rnn.LSTMCell(units)
+
+    def build_lstm(self, units, layers, keep_prob):
+        cell = tf.contrib.rnn.LSTMCell(units, state_is_tuple=True)
+        cell = tf.contrib.rnn.DropoutWrapper(cell, keep_prob)
         cell = tf.contrib.rnn.MultiRNNCell([cell] * layers)
         initial_state = cell.zero_state(32, dtype=tf.int32)
-        return cell, initial_state
+        return cell
     
-    def model(self, inputs, units=32, layers=1):
-        cell, initial_state = self.rnn_cell(units, layers)
-        output, final_state = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
-        with tf.variable_scope('fc1'):
-            fc1 = tf.contrib.layers.fully_connected(output[-1], self.window, activation_fn=None)
+    def build_output(self, units, output):
+        last = tf.transpose(output, [1, 0 ,2])
+        last = tf.gather(last, int(last.get_shape()[0])-1, name='lstm_state')
+        with tf.variable_scope('linear'):
+            w = tf.Variable(tf.truncated_normal([units, self.input_size], stddev=0.01))
+            b = tf.Variable(tf.truncated_normal([self.input_size], stddev=0.01))
+            fc1 = tf.matmul(last, w) + b
         prediction = fc1
-        return prediction, final_state
+        return prediction
 
-    def default_graph(self):
-        with tf.Graph().as_default():
-            inputs, targets, learning_rate = self.input_tensors()
-            prediction, final_state = self.model(inputs)
-            optimizer = tf.train.AdamOptimizer(learning_rate)
-            loss = tf.reduce_mean(tf.square(tf.subtract(prediction, targets)))
-            
-            gradients = optimizer.compute_gradients(loss)
-            clipped_gradients = [tf.clip_by_value(grad, -1.0, 1.0) for grad in gradients]
-            import pdb; pdb.set_trace()
-            train_optimizer = optimizer.apply_gradients(clipped_gradients)
-        return loss, train_optimizer
+    def build_loss(self, logits, targets):
+        loss = tf.reduce_mean(tf.square(tf.subtract(logits, targets)))
+        return loss
 
-    def batch_generator(X, y, batch_size=32):
-        for i in range(0, len(X), batch_size):
-            yield X[i:i + batch_size], y[i:i + batch_size]
+    def build_optimizer(self, loss, learning_rate):
+        optimizer = tf.train.AdamOptimizer(learning_rate)
+        t_vars = tf.trainable_variables()
+        gradients, _ = tf.clip_by_global_norm(tf.gradients(loss, t_vars), 5)
+        train_optimizer = optimizer.apply_gradients(zip(gradients, t_vars))
+        return train_optimizer
 
-    def normalize(X, y):
-        return X/X.max()
+
         
-    def train(self, epochs, lr, verbose=5):
+    def train(self, units, layers, kp=0.2, epochs=10, lr=0.001, verbose=5):
+        tf.reset_default_graph()
+        inputs, targets, learning_rate, keep_prob = self.input_tensors()
+        cell = self.build_lstm(units, layers, keep_prob)
+        
         X_train, X_test, y_train, y_test = self.get_train_test()
-        loss, train_optimizer = self.default_graph()
-        # TODO: Add batching
+
+        outputs, state = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
+        prediction = self.build_output(units, outputs)
+        loss = self.build_loss(prediction, targets)
+        optimizer = self.build_optimizer(loss, learning_rate)
+
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
-            for epoch in epochs:
-                for X, y in self.batch_generator(X_tain, y_train):
-                    loss, _ = sess.run([loss, train_optimizer], feed_dict={inputs: X, targets: y, learning_rate: lr})
+            for epoch in range(epochs):
+                for X, y in self.batch_generator(X_train, y_train):
+                    feed_dict = {inputs: X, targets: y, learning_rate: lr, keep_prob: kp}
+                    l, _ = sess.run([loss, optimizer], feed_dict=feed_dict)
                 if verbose and not (epoch % verbose):
-                    acc = sess.run([loss], feed_dict={inputs: X_valid, targets: y_valid})
-                    print('E:{:>3} Acc: {:.3f}'.format(epoch, acc))
+                    b_loss = sess.run([loss], feed_dict= feed_dict)
+                    print('E: {:>3} b_loss: {:.3f}'.format(epoch, b_loss[-1]))
+            acc = sess.run([loss], feed_dict={inputs: X_test, targets: y_test, learning_rate:lr, keep_prob: kp})
+            
         return    
