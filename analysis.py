@@ -68,23 +68,25 @@ def denorm(a, ma, mi):
 if __name__ == '__main__':
     epochs = 100
     learning_rate = 0.001
-    lstm_size = 16
+    lstm_size = 32
     layers = 1
-    keep_prob = 0.2
+    keep_prob = 0.8
     num_steps = 2
     input_size = 5  
+    stock_count = 20
     
     master_df = pd.read_csv('E:/Analysis/sandp500/all_stocks_5yr.csv')
     master_df['name_cat'] = master_df['Name'].astype('category').cat.codes
-    
-    df = master_df[master_df['Name'] == 'AMZN']
+    tickers = master_df['Name'].unique()
+    import pdb; pdb.set_trace()
+    df = master_df[master_df['Name'].isin(tickers[:stock_count])]
     
     serie = np.array(df['close'])
     serie, _max, _min = normalize(serie)
     net = rnn_network(serie, num_steps, input_size)
     seq, X, y = lil(serie)
     net.set_save_times(50)
-    #net.train(lstm_size=lstm_size, layers=layers, resume=False, batch_size=16, kp=keep_prob, epochs=epochs, lr=learning_rate, verbose=20)
-    pred, loss = predict('nile_251699.ckpt.meta', X, y)
-    up, uy = denorm(pred, _max, _min), denorm(y, _max, _min)
-    res = plotting(uy, up, bins=10, kind='hist')
+    net.train(lstm_size=lstm_size, layers=layers, resume=False, batch_size=32, kp=keep_prob, epochs=epochs, lr=learning_rate, verbose=20)
+    #pred, loss = predict('nile_251699.ckpt.meta', X, y)
+    #up, uy = denorm(pred, _max, _min), denorm(y, _max, _min)
+    #res = plotting(uy, up, bins=10, kind='hist')

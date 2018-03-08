@@ -108,3 +108,5 @@ venv.bak/
 sandp500/
 bitcoin-historical-data/
 checkpoints/
+alphavantage/
+summaries/
