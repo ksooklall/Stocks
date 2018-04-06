@@ -23,15 +23,15 @@ class rnn_network():
         self.embedding_size = embedding_size
         self.stock_count = stock_count
 
-    def get_batch(self):
+    def get_batch(self, data):
         # TODO: Add feature to over lap days
-        start_index = len(self.serie) % self.input_size
-        import pdb; pdb.set_trace()
+        start_index = len(data) % self.input_size
+        
         if not start_index:
-            batch = self.serie.reshape(-1, self.input_size)
+            batch = data.reshape(-1, self.input_size)
         else:
             # If a multiple of input_size is not len(serie) chop off from the start
-            batch = self.serie[start_index:].reshape(-1, self.input_size)
+            batch = data[start_index:].reshape(-1, self.input_size)
         # TODO: Remove starting dates to get full batches
         
         X, y = [], []
@@ -41,16 +41,19 @@ class rnn_network():
 
         return (batch, np.array(X), np.array(y))
 
+    def get_embedding_batch(self, batch_size=32):
+        for stocks in range(1, self.stock_count+1):
+            st = self.serie[self.serie[:, 1] == stocks]
+            _, aX, ay = self.get_batch(st[:, 0])
+            for i in range(0, len(aX), batch_size):
+                yield aX[i:i+batch_size], ay[i:i+batch_size], stocks
+    
     def batch_generator(self, batch_X, batch_y, batch_size=32):
         for i in range(0, len(batch_X), batch_size):
             yield batch_X[i:i + batch_size], batch_y[i:i + batch_size]
 
-    def create_batch(self, X, y):
-        self.serie = X
-        return self.get_batch(self)
-
     def get_train_test(self, split=0.1):
-        _, X, y = self.get_batch()
+        _, X, y = self.get_embedding_batch()
         idx = int(np.round(len(X) * (1 - split)))
         X_train, X_test, y_train, y_test = X[:idx], X[idx:], y[:idx], y[idx:]
         return (X_train, X_test, y_train, y_test)
@@ -61,7 +64,7 @@ class rnn_network():
         learning_rate = tf.placeholder(tf.float32, name='learning_rate')
         keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 
-        if self.embeddings_size:
+        if self.embedding_size:
             ticker = tf.placeholder(dtype=tf.int32, shape=[None, 1], name='ticker')
             return inputs, ticker, targets, learning_rate, keep_prob
         return inputs, targets, learning_rate, keep_prob
@@ -69,9 +72,9 @@ class rnn_network():
 
     def build_lstm(self, lstm_size, layers, keep_prob):
         with tf.variable_scope('rnn_cells'):
-                cell = tf.contrib.rnn.LSTMCell(lstm_size, state_is_tuple=True)
-                cell = tf.contrib.rnn.DropoutWrapper(cell, keep_prob)
-                cell = tf.contrib.rnn.MultiRNNCell([cell] * layers)
+            cell = tf.contrib.rnn.LSTMCell(lstm_size, state_is_tuple=True)
+            cell = tf.contrib.rnn.DropoutWrapper(cell, keep_prob)
+            cell = tf.contrib.rnn.MultiRNNCell([cell] * layers)
         return cell
 
     def build_embedding_matrix(self, inputs, ticker):
@@ -79,8 +82,9 @@ class rnn_network():
         with tf.variable_scope('embeddings'):
             self.embedding_matrix = tf.random_uniform([self.stock_count, self.embedding_size], minval=-1.0, maxval=1.0)
             tiled_embeddings = tf.tile(ticker, multiples=[1, self.num_steps], name='tiled')
-            label_embeddings = tf.nn.embedding_lookup(embedding_matrix, tiled_embeddings, name='emb_labels')
-        inputs_with_embeddings = tf.concat(inputs, label_embeddings, axis=2)
+            label_embeddings = tf.nn.embedding_lookup(self.embedding_matrix, tiled_embeddings, name='emb_labels')
+
+        inputs_with_embeddings = tf.concat([inputs, label_embeddings], axis=2)
         tf.summary.histogram('input_embed', inputs_with_embeddings)
         return inputs_with_embeddings
     
@@ -88,7 +92,7 @@ class rnn_network():
         with tf.variable_scope('last_lstm'):
             last = tf.transpose(output, [1, 0 ,2])
             last = tf.gather(last, int(last.get_shape()[0])-1, name='lstm_state')
-            tf.summary.historgram('last_lstm/lstm_state', last)
+            tf.summary.histogram('last_lstm/lstm_state', last)
             
         with tf.variable_scope('output'):
             w = tf.Variable(tf.truncated_normal([lstm_size, self.input_size], stddev=0.1), name='w')
@@ -115,7 +119,7 @@ class rnn_network():
     def set_save_times(self, counter):
         self.counter = counter
         return self.counter
-        
+       
 
     def merge_summaries(self, sess, path):
         merged = tf.summary.merge_all()
@@ -127,19 +131,19 @@ class rnn_network():
         self.save = True
         return
     
-    def train(self, lstm_size, ticker=ticker, layers, resume=False, batch_size=32, kp=0.8, epochs=10, lr=0.001, verbose=5):
+    def train(self, lstm_size, layers, resume=False, batch_size=32, kp=0.8, epochs=10, lr=0.001, verbose=5):
         #tf.reset_default_graph()
         _count = 2
         if self.embedding_size:
             inputs, ticker, targets, learning_rate, keep_prob = self.input_tensors()
-            embedding_inputs = self.build_embedding_matrix(ticker)
+            embedding_inputs = self.build_embedding_matrix(inputs, ticker)
         else:
             inputs, targets, learning_rate, keep_prob = self.input_tensors()
             
         inputs = embedding_inputs if self.embedding_size else inputs
         cell = self.build_lstm(lstm_size, layers, keep_prob)
         self.counter = self.counter if self.counter else epoch//10
-        X_train, X_test, y_train, y_test = self.get_train_test()
+        #X_train, X_test, y_train, y_test = self.get_embedding_batch()
         self.debugging_vars()
 
         outputs, state = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
@@ -167,8 +171,9 @@ class rnn_network():
                 sess.run(tf.global_variables_initializer())
 
             for epoch in range(epochs):
-                for X, y in self.batch_generator(X_train, y_train):
-                    feed_dict = {inputs: X, targets: y, learning_rate: lr, keep_prob: kp}
+                for X, y, stk in self.get_embedding_batch(batch_size=32):
+                    feed_dict = {inputs: X, ticker: stk, targets: y, learning_rate: lr, keep_prob: kp}
+                    import pdb; pdb.set_trace()
                     sess.run(optimizer, feed_dict=feed_dict)
 
                 if verbose and not (epoch % verbose):
