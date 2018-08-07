@@ -70,12 +70,16 @@ class rnn_network():
         return inputs, targets, learning_rate, keep_prob
         
 
-    def build_lstm(self, lstm_size, layers, keep_prob):
+    def build_lstm(self, inputs, lstm_size, layers, keep_prob):
         with tf.variable_scope('rnn_cells'):
-            cell = tf.contrib.rnn.LSTMCell(lstm_size, state_is_tuple=True)
-            cell = tf.contrib.rnn.DropoutWrapper(cell, keep_prob)
-            cell = tf.contrib.rnn.MultiRNNCell([cell] * layers)
-        return cell
+	    def rnn_cell():
+		cell = tf.contrib.rnn.LSTMCell(lstm_size, initializer=tf.random_uniform_initializer(-0.1, 0.1, seed=2), state_is_tuple=True)
+		cell = tf.contrib.rnn.DropoutWrapper(cell, keep_prob)
+		return cell
+            cells = tf.contrib.rnn.MultiRNNCell([rnn_cell() for _ in range(layers)])
+            
+        output, final_states = tf.nn.dynamic_rnn(cells, inputs, dtype=tf.float32)
+        return output, final_states
 
     def build_embedding_matrix(self, inputs, ticker):
         # Figure out how to reshape inputs to use embeddings
@@ -85,6 +89,7 @@ class rnn_network():
             label_embeddings = tf.nn.embedding_lookup(self.embedding_matrix, tiled_embeddings, name='emb_labels')
 
         inputs_with_embeddings = tf.concat([inputs, label_embeddings], axis=2)
+        #inputs_with_embeddings = tf.contrib.layers.embed_sequence(inputs, 20, embed_dim=self.embedding_size)
         tf.summary.histogram('input_embed', inputs_with_embeddings)
         return inputs_with_embeddings
     
@@ -141,12 +146,10 @@ class rnn_network():
             inputs, targets, learning_rate, keep_prob = self.input_tensors()
             
         inputs = embedding_inputs if self.embedding_size else inputs
-        cell = self.build_lstm(lstm_size, layers, keep_prob)
+        outputs, state = self.build_lstm(lstm_size, inputs, layers, keep_prob)
         self.counter = self.counter if self.counter else epoch//10
         #X_train, X_test, y_train, y_test = self.get_embedding_batch()
         self.debugging_vars()
-
-        outputs, state = tf.nn.dynamic_rnn(cell, inputs, dtype=tf.float32)
         prediction = self.build_output(lstm_size, outputs)
         loss = self.build_loss(prediction, targets)
         optimizer = self.build_optimizer(loss, learning_rate)
