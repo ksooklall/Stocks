@@ -22,7 +22,8 @@ from bs4 import BeautifulSoup as bs
 from datetime import datetime
 import pandas as pd
 import requests
-
+import urllib3
+import ssl
 
 class DataIngestion():
     EW = 'https://www.earningswhispers.com/stocks/'
@@ -87,6 +88,8 @@ class DataIngestion():
         df['market_cap'] = df['mc_obj'].mul(df['multiplier'].map(market_exp))
         df = df[df['ticker'].notnull()]
 
+        df['rank_eps_vgm'] = df['ticker'].map(self.get_zacks_numbers)
+
         df['eps_consensus_revenue'] = df['ticker'].map(self.get_whisper_numbers)
         df[['eps', 'consensus', 'revenue']] = pd.DataFrame(df['eps_consensus_revenue'].values.tolist(), index=df.index)
         
@@ -100,7 +103,7 @@ class DataIngestion():
         # EPS cleaning        
         df['whisper_eps'] = df['eps'].str.extract(r'(\d+\.\d+)').astype(float)
         df = df.drop(unused_cols, axis=1)
-        import pdb; pdb.set_trace()        
+        
         return df
 
     def get_whisper_numbers(self, ticker):
@@ -111,6 +114,31 @@ class DataIngestion():
         revenue = soup.find_all("div", id="revest")[0].get_text().strip()
         return [earnings_per_share, consensus, revenue]
 
+    def get_zacks_numbers(self, ticker):
+        # Figure out how to handle with pd.read_html()
+        # ConnectionResetError: [WinError 10054] An existing connection was forcibly closed by the remote host
+        
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+        http = urllib3.PoolManager()
+        res = http.request('GET', 'https://www.zacks.com/stock/quote/{0}?q={0}'.format(ticker))
+        soup = bs(res.data.decode('utf-8'))
+
+        import pdb; pdb.set_trace()
+        tables = soup.find_all('table')
+        # Get Accurate EST, Earning ESP, Report Release Time, Forward PE, PEG Ratio 
+        eps_df = pd.read_html(str(tables[3]))[0]
+        esp, acc_est, _, _, earning_date, _, _, forward_pe, peg_ratio = eps_df[1].values
+        
+        # Get z_rank, ind_rank, sector_rank, value, growth, momentum, vgm
+        rank_df = pd.read_html(str(tables[5]))[0]
+        z_rank, ind_rank, sector_rank, _, _, _ = rank_df[1].values
+
+        _, growth, momentum, vgm = rank_df.loc[3][0].split('|')
+        return [z_rank, ind_rank, sector_rank, growth, momentum, vgm]
+                           
     def normalize():
         pass
 
@@ -136,5 +164,5 @@ if __name__ == '__main__':
     tickers = ['FB']
     url = 'https://finance.yahoo.com/calendar/earnings?from=2018-07-22&to=2018-07-28&day=2018-07-25'
     di = DataIngestion(tickers, api_key)
-    bcs = di.get_earning_calender()
+    bcs = di.get_zacks_numbers('MYGN')
     
