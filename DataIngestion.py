@@ -27,6 +27,7 @@ import ssl
 
 class DataIngestion():
     EW = 'https://www.earningswhispers.com/stocks/'
+    NASDAQ = 'https://www.nasdaq.com/earnings/earnings-calendar.aspx?date=2018-Aug-23'
     
     def __init__(self, tickers, api_key=None):
         self.tickers = tickers
@@ -64,10 +65,13 @@ class DataIngestion():
             df.append(_get_whisper_numbers)
         
     def get_earning_calender(self):
-        df_list = pd.read_html('https://www.nasdaq.com/earnings/earnings-calendar.aspx?date=2018-Aug-20')
+        df_list = pd.read_html(self.NASDAQ)
         market_exp = {'M': 1e6, 'B': 1e9}
-        unused_cols = ['sym_mc_size', 'Time', 'multiplier', 'mc_obj', 'eps_consensus_revenue', 'rev1', 'eps', 'consensus']
-        float_cols = ['eps', 'consensus']
+        ew_drop_cols = ['sym_mc_size', 'Time', 'multiplier', 'mc_obj', 'eps_consensus_revenue', 'rev1', 'eps', 'consensus']
+        z_drop_cols = ['zacks']
+        nasdaq_drop_cols = ['quarter_ending', 'suprise_pct']
+        
+        float_cols = ['eps', 'consensus', 'mc_obj', 'ew_eps']
         rename = {'CompanyName(Symbol)MarketCapSortby:Name/Size': 'sym_mc_size',
                   'ExpectedReportDate': 'expected_date',
                   "LastYear'sReportDate": 'last_yr_report_date',
@@ -75,35 +79,37 @@ class DataIngestion():
                   'ConsensusEPS*Forecast': 'consensus_eps',
                   '%Suprise': 'suprise_pct',
                   '#ofEsts': 'analysts',
-                  'FiscalQuarterEnding': 'quarter_ending'
-                  }
+                  'FiscalQuarterEnding': 'quarter_ending'}
         
         df = df_list[0]
         df.columns = df.columns.str.replace('\t', '').str.replace('\n', '').str.replace(' ', '')
         df = df.rename(columns=rename)
         df = df.loc[1:].reset_index(drop=True)
-        df['ticker'] = df['sym_mc_size'].str.extract('.*\((.*)\).*')
+        df['ticker'] = df['sym_mc_size'].str.extract('.*\((.*)\).*', expand=False)
         df['mc_obj'] = df['sym_mc_size'].str.split('$').str.get(1).str[:-1].astype(float)
-        df['multiplier'] = df['sym_mc_size'].str.extract('\d+\.\d+(\w)')
+        df['multiplier'] = df['sym_mc_size'].str.extract('\d+\.\d+(\w)', expand=False)
         df['market_cap'] = df['mc_obj'].mul(df['multiplier'].map(market_exp))
+        df = df.drop(nasdaq_drop_cols, axis=1)
         df = df[df['ticker'].notnull()]
 
-        df['rank_eps_vgm'] = df['ticker'].map(self.get_zacks_numbers)
-
+        # EW cleaning
         df['eps_consensus_revenue'] = df['ticker'].map(self.get_whisper_numbers)
         df[['eps', 'consensus', 'revenue']] = pd.DataFrame(df['eps_consensus_revenue'].values.tolist(), index=df.index)
-        
-        # Revenue cleaning
         df[['rev1', 'multiplier']] = df['revenue'].str.extract(r'(\d+\.\d+ (\w))')[0].str.split(' ', n=1, expand=True)
-        df['revenue'] = (df['rev1'].astype(float) * df['multiplier'].map(market_exp)).fillna(-1)
+        df['ew_revenue'] = (df['rev1'].astype(float) * df['multiplier'].map(market_exp)).fillna(-1)
+        df['ew_curr_eps_est'] = df['consensus'].replace('[\$,)]','', regex=True).replace('[(]','-', regex=True).replace('(Consensus: *)', '', regex=True).astype(float)
+        df['ew_eps'] = df['eps'].str.extract(r'(\d+\.\d+)')
+        df = df.drop(ew_drop_cols, axis=1)
 
-        # Consensus cleaning
-        df['consensus_eps'] = df['consensus'].replace('[\$,)]','', regex=True).replace('[(]','-', regex=True).replace('(Consensus: *)', '', regex=True).astype(float)
+        # Zack cleaning
+        df['zacks'] = df['ticker'].map(self.get_zacks_numbers)
+        df[['z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_forward_pe', 'z_peg_ratio', 'z_rank', 'z_ind_rank', 'z_sector_rank', 'z_growth', 'z_momentum', 'z_vgm']] = pd.DataFrame(df['zacks'].values.tolist(), index=df.index)
+        df = df.dropna(subset=['z_rank'])
+        df['z_rank'] = df['z_rank'].str.get(-1)
+        df['z_release_time'] = df['z_release_time'].str.extract(r'([A-Z]+)', expand=False)
+        df['z_esp'] = df['z_esp'].str.replace('%', '')
+        df = df.drop(z_drop_cols, axis=1)
 
-        # EPS cleaning        
-        df['whisper_eps'] = df['eps'].str.extract(r'(\d+\.\d+)').astype(float)
-        df = df.drop(unused_cols, axis=1)
-        
         return df
 
     def get_whisper_numbers(self, ticker):
@@ -126,18 +132,20 @@ class DataIngestion():
         res = http.request('GET', 'https://www.zacks.com/stock/quote/{0}?q={0}'.format(ticker))
         soup = bs(res.data.decode('utf-8'))
 
-        import pdb; pdb.set_trace()
         tables = soup.find_all('table')
-        # Get Accurate EST, Earning ESP, Report Release Time, Forward PE, PEG Ratio 
-        eps_df = pd.read_html(str(tables[3]))[0]
-        esp, acc_est, _, _, earning_date, _, _, forward_pe, peg_ratio = eps_df[1].values
+        # Get ESP, Accurate EST, Earning ESP, Current Qtr Est, Report Release Time, Forward PE, PEG Ratio 
+        esp_df = pd.read_html(str(tables[3]))[0]
+        esp, acc_est, curr_eps_est, _, earning_date, _, _, forward_pe, peg_ratio = esp_df[1].values
         
         # Get z_rank, ind_rank, sector_rank, value, growth, momentum, vgm
         rank_df = pd.read_html(str(tables[5]))[0]
         z_rank, ind_rank, sector_rank, _, _, _ = rank_df[1].values
 
-        _, growth, momentum, vgm = rank_df.loc[3][0].split('|')
-        return [z_rank, ind_rank, sector_rank, growth, momentum, vgm]
+        value, growth, momentum, vgm = rank_df.loc[3][0].split('|')
+
+        # Optimize below to happen in df above or better
+        value, growth, momentum, vgm = value[-8:-7], growth[1], momentum[1], vgm[1]        
+        return [esp, acc_est, curr_eps_est, earning_date, forward_pe, peg_ratio, z_rank, ind_rank, sector_rank, growth, momentum, vgm]
                            
     def normalize():
         pass
@@ -164,5 +172,7 @@ if __name__ == '__main__':
     tickers = ['FB']
     url = 'https://finance.yahoo.com/calendar/earnings?from=2018-07-22&to=2018-07-28&day=2018-07-25'
     di = DataIngestion(tickers, api_key)
-    bcs = di.get_zacks_numbers('MYGN')
+    df = di.get_earning_calender()
+    df.to_csv('ew_zack_df.csv')
+
     
