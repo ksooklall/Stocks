@@ -56,11 +56,11 @@ class DataIngestion():
             master_df.to_csv(url)
        
     def get_earning_calender(self):
-        df_list = pd.read_html(self.URLS['nasdaq'].format(self.date))
         market_exp = {'M': 1e6, 'B': 1e9}
         ew_drop_cols = ['sym_mc_size', 'Time', 'multiplier', 'mc_obj', 'eps_consensus_revenue', 'rev1', 'eps', 'consensus']
         z_drop_cols = ['zacks']
         nasdaq_drop_cols = ['quarter_ending']
+        numeric_cols = ['z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est']
         
         rename = {'CompanyName(Symbol)MarketCapSortby:Name/Size': 'sym_mc_size',
                   'ExpectedReportDate': 'expected_date',
@@ -70,31 +70,38 @@ class DataIngestion():
                   '%Suprise': 'suprise_pct',
                   '#ofEsts': 'analysts',
                   'FiscalQuarterEnding': 'quarter_ending'}
-        
+
+        df_list = pd.read_html(self.URLS['nasdaq'].format(self.date))
         df = df_list[0]
         df.columns = df.columns.str.replace('\t', '').str.replace('\n', '').str.replace(' ', '')
         df = df.rename(columns=rename)
-        df = df.loc[1:].reset_index(drop=True)
+
+        # If only one report, there won't be an extra header file
+        if len(df) == 1:
+            df = df.reset_index(drop=True)
+        else:
+            df = df.loc[1:].reset_index(drop=True)
+        
         df['tickers'] = df['sym_mc_size'].str.extract('.*\((.*)\).*', expand=False)
         df['mc_obj'] = df['sym_mc_size'].str.split('$').str.get(1).str[:-1].astype(float)
         df['multiplier'] = df['sym_mc_size'].str.extract('\d+\.\d+(\w)', expand=False)
         df['market_cap'] = df['mc_obj'].mul(df['multiplier'].map(market_exp))
         df = df.drop(nasdaq_drop_cols, axis=1)
-        df = df[df['ticker'].notnull()] 
+        df = df[df['tickers'].notnull()] 
         print('Completed nasdaq scraping')
-        
+
         # EW cleaning
-        df['eps_consensus_revenue'] = df['ticker'].map(self.get_whisper_numbers)
+        df['eps_consensus_revenue'] = df['tickers'].map(self.get_whisper_numbers)
         df[['eps', 'consensus', 'revenue']] = pd.DataFrame(df['eps_consensus_revenue'].values.tolist(), index=df.index)
         df[['rev1', 'multiplier']] = df['revenue'].str.extract(r'(\d+\.\d+ (\w))')[0].str.split(' ', n=1, expand=True)
         df['ew_revenue'] = (df['rev1'].astype(float) * df['multiplier'].map(market_exp)).fillna(-1)
         df['ew_curr_eps_est'] = df['consensus'].replace('[\$,)]','', regex=True).replace('[(]','-', regex=True).replace('(Consensus: *)', '', regex=True).astype(float)
-        df['ew_eps'] = df['eps'].str.extract(r'(\d+\.\d+)')
+        df['ew_eps'] = df['eps'].replace('[$[)]','', regex=True).replace('[(]','-', regex=True)
         df = df.drop(ew_drop_cols, axis=1)
         print('Completed ew scraping')
         
         # Zack cleaning
-        df['zacks'] = df['ticker'].map(self.get_zacks_numbers)
+        df['zacks'] = df['tickers'].map(self.get_zacks_numbers)
         df[['z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_forward_pe', 'z_peg_ratio', 'z_rank', 'z_ind_rank', 'z_sector_rank', 'z_growth', 'z_momentum', 'z_vgm']] = pd.DataFrame(df['zacks'].values.tolist(), index=df.index)
         df = df.dropna(subset=['z_rank'])
         df['z_rank'] = df['z_rank'].str.get(-1)
@@ -102,7 +109,8 @@ class DataIngestion():
         df['z_esp'] = df['z_esp'].str.replace('%', '')
         df = df.drop(z_drop_cols, axis=1)
         print('Completed zacks scraping')
-        
+
+        df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
         return df
 
     def get_whisper_numbers(self, ticker):
