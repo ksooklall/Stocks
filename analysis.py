@@ -7,12 +7,13 @@ def strategy_1(path, time='AMC'):
     Zack rank greater than  or equal to 3
     Most Accurate Est >= Current Qtr Est and EW_estimate >= Current Qtr Est
     """
-
-    df = pd.read_csv(path, encoding='ISO-8859-1')
     
+    df = pd.read_csv(path, encoding='ISO-8859-1')
+    time = 'BMO' if pd.to_datetime(trading_df['expected_date']).iloc[0].date().weekday() == 4 else time
+
     df = df[df['z_release_time'] == time]
     strat1 = ((df['z_rank'] <= 3) &
-              (df['z_acc_est'] >= df['z_curr_eps_est']) &
+              (df['z_acc_est'] > df['z_curr_eps_est']) &
               (df['ew_eps'] >= df['ew_curr_eps_est']))
 
 
@@ -34,12 +35,17 @@ def strategy_1(path, time='AMC'):
     import pdb; pdb.set_trace()
 
 if __name__ == '__main__':
-    dates = ['2018-Aug-28', '2018-Aug-29', '2018-Aug-30', '2018-Aug-31']
+    dates_dict = {'2018-Aug-30': False, '2018-Aug-31': True}
     paths = []
-    time = 'AMC'
+    time = 'BMO'
 
-    for date in dates:
-        if not os.path.exists('scraped_data/{}_ew_zack_df.csv'.format(date)):
+    # create arg parser to input date and get training df
+    # can also input strat
+    # add an option to override existing data (DONE)
+    
+    for date, override in dates_dict.items():
+    
+        if not os.path.exists('scraped_data/{}_ew_zack_df.csv'.format(date)) or override:
             di = DataIngestion(tickers=[], date=date)
             path = di.scrape_daily_df()
             paths.append(path)
