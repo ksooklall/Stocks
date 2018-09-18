@@ -2,44 +2,60 @@ from DataIngestion import DataIngestion
 import pandas as pd
 import os
 
-def strategy_1(path, time='AMC'):
+def strategy_1(path):
     """
     Zack rank greater than  or equal to 3
     Most Accurate Est >= Current Qtr Est and EW_estimate >= Current Qtr Est
     """
+    trades = {'long': 'No long position', 'short': 'No short position'}
     
+    useful_columns = ['tickers', 'z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est',
+                             'market_cap', 'z_release_time', 'z_esp', 'expected_date', 'position']
     df = pd.read_csv(path, encoding='ISO-8859-1')
-    time = 'BMO' if pd.to_datetime(trading_df['expected_date']).iloc[0].date().weekday() == 4 else time
+    trading_df = pd.DataFrame()
 
-    df = df[df['z_release_time'] == time]
-    strat1 = ((df['z_rank'] <= 3) &
+    strat1 = ((df['z_esp'] >= 0) &
               (df['z_acc_est'] > df['z_curr_eps_est']) &
-              (df['ew_eps'] >= df['ew_curr_eps_est']))
-
+              (df['ew_eps'] > df['ew_curr_eps_est']))
 
     strat2 = ((df['z_rank'] <= 3) &
               (df['z_esp'] >= 0) &
-              (df['z_acc_est'] >= df['z_curr_eps_est']) &
-              (df['ew_eps'] >= df['ew_curr_eps_est']))
-    
-    strat3 = ((df['z_rank'] <= 3))
-    
-    trading_df = df.loc[strat2]
-    if trading_df.empty:
-        trading_df = df.loc[strat3]
+              (df['z_acc_est'] > df['z_curr_eps_est']) &
+              (df['ew_eps'] > df['ew_curr_eps_est']))
+
+    short_strat = (df['z_rank'] <= 3 &
+                  (df['z_acc_est'] < df['z_curr_eps_est']) &
+                  (df['ew_eps'] < df['ew_curr_eps_est']))
+
+    for long_strats in [strat2, strat1]:
+        long_df = df.loc[long_strats]
+        long_df['position'] = 'Long'
+        if not long_df.empty:
+            trades['long'] = long_df[['tickers', 'expected_date', 'z_release_time']].to_dict(orient='records')
+
+        short_df = df.loc[short_strat]
+        short_df['position'] = 'Short'
+        if not short_df.empty:
+            trades['short'] = short_df[['tickers', 'expected_date', 'z_release_time']].to_dict(orient='records')
         
-    trading_df = trading_df[['tickers', 'z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est',
-                             'market_cap', 'z_release_time', 'z_esp', 'expected_date']]    
+        trading_df = pd.concat([trading_df, long_df, short_df])
+        if not trading_df.empty:
+            break
+       
+    trading_df = trading_df[useful_columns]    
     trading_df = trading_df.sort_values(['z_rank', 'market_cap'])
-    print(trading_df.head())
+    print(trading_df)
+    print('\n')
+    print(trades)
     import pdb; pdb.set_trace()
 
-if __name__ == '__main__':
-    dates_dict = {'2018-Aug-30': False, '2018-Aug-31': True}
-    paths = []
-    time = 'BMO'
 
-    # create arg parser to input date and get training df
+if __name__ == '__main__':
+    dates_dict = {'2018-Sep-18': False, '2018-Sep-19': False, '2018-Sep-20': False}
+    paths = []
+    # Set script to run once a day
+    # create arg parser to input date (d) and strat(s) and get training df
+    # exp: python Analysis.py -d '2018-Sep-01' -s 2 --> training_df
     # can also input strat
     # add an option to override existing data (DONE)
     
@@ -54,4 +70,4 @@ if __name__ == '__main__':
             paths.append(path)
 
     for path in paths:    
-        strategy_1(path, time=time)
+        strategy_1(path)

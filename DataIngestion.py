@@ -76,12 +76,13 @@ class DataIngestion():
         df.columns = df.columns.str.replace('\t', '').str.replace('\n', '').str.replace(' ', '')
         df = df.rename(columns=rename)
 
-        # If only one report, there won't be an extra header file
-        if len(df) == 1:
-            df = df.reset_index(drop=True)
-        else:
+        # If only one report, there won't be an extra header file (Need example)
+        # Not sure why this logic is here (Investigate)
+        if df[df.columns[0]].iloc[0] == 'Time':
             df = df.loc[1:].reset_index(drop=True)
-        
+        else:
+            df = df.reset_index(drop=True)
+            
         df['tickers'] = df['sym_mc_size'].str.extract('.*\((.*)\).*', expand=False)
         df['mc_obj'] = df['sym_mc_size'].str.split('$').str.get(1).str[:-1].astype(float)
         df['multiplier'] = df['sym_mc_size'].str.extract('\d+\.\d+(\w)', expand=False)
