@@ -19,6 +19,9 @@ Blue Chip Stocks
 Earning calender
 https://www.nasdaq.com/earnings/earnings-calendar.aspx?date=2018-Aug-06
 
+RSI:
+
+
 Use 8/15/2018 as test, small amount of stocks
 """
 from bs4 import BeautifulSoup as bs
@@ -33,7 +36,8 @@ class DataIngestion():
     URLS = {
         'ew': 'https://www.earningswhispers.com/stocks/',
         'zacks': 'https://www.zacks.com/stock/quote/{0}?q={0}',
-        'nasdaq': 'https://www.nasdaq.com/earnings/earnings-calendar.aspx?date={}'
+        'nasdaq': 'https://www.nasdaq.com/earnings/earnings-calendar.aspx?date={}',
+        'rsi': 'https://www.stockmonitor.com/stock-screener/rsi-crossed-above-70/'
         }
     
     def __init__(self, tickers, date, api_key=None):
@@ -73,6 +77,8 @@ class DataIngestion():
 
         df_list = pd.read_html(self.URLS['nasdaq'].format(self.date))
         df = df_list[0]
+        if df.empty:
+            return df
         df.columns = df.columns.str.replace('\t', '').str.replace('\n', '').str.replace(' ', '')
         df = df.rename(columns=rename)
 
@@ -82,7 +88,7 @@ class DataIngestion():
             df = df.loc[1:].reset_index(drop=True)
         else:
             df = df.reset_index(drop=True)
-            
+
         df['tickers'] = df['sym_mc_size'].str.extract('.*\((.*)\).*', expand=False)
         df['mc_obj'] = df['sym_mc_size'].str.split('$').str.get(1).str[:-1].astype(float)
         df['multiplier'] = df['sym_mc_size'].str.extract('\d+\.\d+(\w)', expand=False)
@@ -117,7 +123,13 @@ class DataIngestion():
     def get_whisper_numbers(self, ticker):
         r = requests.get(self.URLS['ew'] + ticker)
         soup = bs(r.text, "html5lib")
-        earnings_per_share = soup.find_all("div", class_="mainitem")[0].get_text().strip()
+        soup_eps = soup.find_all("div", class_='mainitem')
+        #soup_consensus = soup.find_all("div", class_='consensus')
+        #soup_revest = soup.find_all("div", id='consensus')
+        
+        if not soup_eps:
+            return [None, None, None]
+        earnings_per_share = soup_eps[0].get_text().strip()
         consensus = soup.find_all("div", id="consensus")[0].get_text().strip()
         revenue = soup.find_all("div", id="revest")[0].get_text().strip()
         return [earnings_per_share, consensus, revenue]
@@ -135,6 +147,7 @@ class DataIngestion():
         soup = bs(res.data.decode('utf-8'))
 
         tables = soup.find_all('table')
+        # ********************** TODO: Get current share price
         # Get ESP, Accurate EST, Earning ESP, Current Qtr Est, Report Release Time, Forward PE, PEG Ratio 
         esp_df = pd.read_html(str(tables[3]))[0]
         esp, acc_est, curr_eps_est, _, earning_date, _, _, forward_pe, peg_ratio = esp_df[1].values
@@ -158,14 +171,20 @@ class DataIngestion():
     def plot():
         pass
 
-    def bol_bands():
-        pass
-
-    def moving_avg():
-        pass
-
-    def exp_avg():
-        pass
+    def get_rsi_frame(self, price_range=[10, 100]):
+        lower, upper = price_range
+        df_list = pd.read_html(self.URLS['rsi'])
+        df = df_list[1]
+        df.columns = df.columns.str.replace('\n', '').str.replace(' ', '').str.replace('[^a-zA-Z]', '').str.lower()
+        df = df.query('bid > 0 and ask > 0')
+        df = df.drop(['high', 'low'], axis=1)
+        df['price'] = df['price'].str.extract('(\d+\.\d+)', expand=False)
+        df['change'] = df['change'].str.extract('.*\((.*)\).*', expand=False).str.extract('(\d+\.\d+)')
+        df[['price', 'change']] = df[['price', 'change']].apply(pd.to_numeric, errors='coerce')
+        
+        df = df.loc[df['price'].between(lower, upper)]
+        df = df.sort_values(['volume'])
+        import pdb; pdb.set_trace()
 
     def scrape_daily_df(self):
         print("Begin scraping for {}...".format(self.date))

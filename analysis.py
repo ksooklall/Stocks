@@ -51,7 +51,7 @@ def strategy_1(path):
 
 
 if __name__ == '__main__':
-    dates_dict = {'2018-Sep-18': False, '2018-Sep-19': False, '2018-Sep-20': False}
+    dates_dict = {'2018-Sep-24': False, '2018-Sep-25': False, '2018-Sep-26': False, '2018-Sep-27': False}
     paths = []
     # Set script to run once a day
     # create arg parser to input date (d) and strat(s) and get training df
