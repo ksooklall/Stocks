@@ -109,11 +109,13 @@ class DataIngestion():
         
         # Zack cleaning
         df['zacks'] = df['tickers'].map(self.get_zacks_numbers)
-        df[['z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_forward_pe', 'z_peg_ratio', 'z_rank', 'z_ind_rank', 'z_sector_rank', 'z_growth', 'z_momentum', 'z_vgm']] = pd.DataFrame(df['zacks'].values.tolist(), index=df.index)
+        df[['z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_forward_pe', 'z_peg_ratio', 'z_rank', 'z_ind_rank', 'z_sector_rank', 'z_growth', 'z_momentum', 'z_vgm', 'z_industry', 'z_price']] = pd.DataFrame(df['zacks'].values.tolist(), index=df.index)
         df = df.dropna(subset=['z_rank'])
         df['z_rank'] = df['z_rank'].str.get(-1)
         df['z_release_time'] = df['z_release_time'].str.extract(r'([A-Z]+)', expand=False)
         df['z_esp'] = df['z_esp'].str.replace('%', '')
+        df['z_price'] = df['z_price'].str.extract(r'(\d+\.\d+\d+)', expand=False)
+        df['z_industry'] = df['z_industry'].str.replace('Industry: ', '')
         df = df.drop(z_drop_cols, axis=1)
         print('Completed zacks scraping')
 
@@ -145,9 +147,11 @@ class DataIngestion():
         http = urllib3.PoolManager()
         res = http.request('GET', self.URLS['zacks'].format(ticker))
         soup = bs(res.data.decode('utf-8'))
-
+        
         tables = soup.find_all('table')
-        # ********************** TODO: Get current share price
+        industry = soup.find_all(class_='sector')[0].get_text()
+        price = soup.find_all(class_='last_price')[0].get_text()
+        
         # Get ESP, Accurate EST, Earning ESP, Current Qtr Est, Report Release Time, Forward PE, PEG Ratio 
         esp_df = pd.read_html(str(tables[3]))[0]
         esp, acc_est, curr_eps_est, _, earning_date, _, _, forward_pe, peg_ratio = esp_df[1].values
@@ -155,12 +159,11 @@ class DataIngestion():
         # Get z_rank, ind_rank, sector_rank, value, growth, momentum, vgm
         rank_df = pd.read_html(str(tables[5]))[0]
         z_rank, ind_rank, sector_rank, _, _, _ = rank_df[1].values
-
         value, growth, momentum, vgm = rank_df.loc[3][0].split('|')
 
         # Optimize below to happen in df above or better
         value, growth, momentum, vgm = value[-8:-7], growth[1], momentum[1], vgm[1]        
-        return [esp, acc_est, curr_eps_est, earning_date, forward_pe, peg_ratio, z_rank, ind_rank, sector_rank, growth, momentum, vgm]
+        return [esp, acc_est, curr_eps_est, earning_date, forward_pe, peg_ratio, z_rank, ind_rank, sector_rank, growth, momentum, vgm, industry, price]
                            
     def normalize():
         pass
@@ -184,7 +187,7 @@ class DataIngestion():
         
         df = df.loc[df['price'].between(lower, upper)]
         df = df.sort_values(['volume'])
-        import pdb; pdb.set_trace()
+
 
     def scrape_daily_df(self):
         print("Begin scraping for {}...".format(self.date))

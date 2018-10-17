@@ -10,7 +10,7 @@ def strategy_1(path):
     trades = {'long': 'No long position', 'short': 'No short position'}
     
     useful_columns = ['tickers', 'z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est',
-                             'market_cap', 'z_release_time', 'z_esp', 'expected_date', 'position']
+                             'market_cap', 'z_release_time', 'z_esp', 'z_industry', 'z_price', 'expected_date', 'position']
     df = pd.read_csv(path, encoding='ISO-8859-1')
     trading_df = pd.DataFrame()
 
@@ -51,7 +51,7 @@ def strategy_1(path):
 
 
 if __name__ == '__main__':
-    dates_dict = {'2018-Sep-24': False, '2018-Sep-25': False, '2018-Sep-26': False, '2018-Sep-27': False}
+    dates_dict = {'2018-Oct-17': True, '2018-Oct-18': False, '2018-Oct-19': False}
     paths = []
     # Set script to run once a day
     # create arg parser to input date (d) and strat(s) and get training df
