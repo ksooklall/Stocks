@@ -6,21 +6,23 @@ Alpha Vantage:
 raw_url - https://www.alphavantage.co/documentation/
 generic_url - 'alphavantage/{}_tks.csv'.format(len(tickers))
 
-Zacks Research Investment
+Zacks Research Investment:
 raw_url - https://www.zacks.com/stock/quote/FB?q=fb
 generic_url - https://www.zacks.com/stock/quote/FB?q=fb
 
-EarningsWhispers
+EarningsWhispers:
 raw_url - https://www.earningswhispers.com/stocks/fb
 
-Blue Chip Stocks
+Blue Chip Stocks:
 'https://www.nasdaq.com/screening/companies-by-industry.aspx?sortname=marketcap&sorttype=1&exchange=NASDAQ'
 
-Earning calender
+Earning calender:
 https://www.nasdaq.com/earnings/earnings-calendar.aspx?date=2018-Aug-06
 
 RSI:
-
+https://www.stockmonitor.com/stock-screener/rsi-crossed-above-70/
+Form4:
+https://www.secform4.com/site/about.htm
 
 Use 8/15/2018 as test, small amount of stocks
 """
@@ -30,6 +32,9 @@ import pandas as pd
 import requests
 import urllib3
 import ssl
+from PandasUtility import convert_to_float, clean_columns
+from ColumnRenames import form4, nasdaq
+import re
 
 class DataIngestion():
     # UNIFORM_RESOURCE_LOCATORS
@@ -37,7 +42,11 @@ class DataIngestion():
         'ew': 'https://www.earningswhispers.com/stocks/',
         'zacks': 'https://www.zacks.com/stock/quote/{0}?q={0}',
         'nasdaq': 'https://www.nasdaq.com/earnings/earnings-calendar.aspx?date={}',
-        'rsi': 'https://www.stockmonitor.com/stock-screener/rsi-crossed-above-70/'
+        'rsi': 'https://www.stockmonitor.com/stock-screener/rsi-crossed-above-70/',
+        'reuters_pg1': 'https://www.reuters.com/finance/stocks/insider-trading/{}.N',
+        'reuters_pg2': 'https://www.reuters.com/finance/stocks/insider-trading/{}.N?symbol=&name=&pn=2&sortDir=&sortBy=',
+        'sec_cik': 'http://www.sec.gov/cgi-bin/browse-edgar?CIK={}&Find=Search&owner=exclude&action=getcompany',
+        'form4': 'https://www.secform4.com/insider-trading/{}.htm'
         }
     
     def __init__(self, tickers, date, api_key=None):
@@ -65,22 +74,13 @@ class DataIngestion():
         z_drop_cols = ['zacks']
         nasdaq_drop_cols = ['quarter_ending']
         numeric_cols = ['z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est']
-        
-        rename = {'CompanyName(Symbol)MarketCapSortby:Name/Size': 'sym_mc_size',
-                  'ExpectedReportDate': 'expected_date',
-                  "LastYear'sReportDate": 'last_yr_report_date',
-                  "LastYear'sEPS*": 'last_yr_eps',
-                  'ConsensusEPS*Forecast': 'consensus_eps',
-                  '%Suprise': 'suprise_pct',
-                  '#ofEsts': 'analysts',
-                  'FiscalQuarterEnding': 'quarter_ending'}
 
         df_list = pd.read_html(self.URLS['nasdaq'].format(self.date))
         df = df_list[0]
         if df.empty:
             return df
         df.columns = df.columns.str.replace('\t', '').str.replace('\n', '').str.replace(' ', '')
-        df = df.rename(columns=rename)
+        df = df.rename(columns=nasdaq)
 
         # If only one report, there won't be an extra header file (Need example)
         # Not sure why this logic is here (Investigate)
@@ -120,6 +120,7 @@ class DataIngestion():
         print('Completed zacks scraping')
 
         df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
+        
         return df
 
     def get_whisper_numbers(self, ticker):
@@ -149,6 +150,9 @@ class DataIngestion():
         soup = bs(res.data.decode('utf-8'))
         
         tables = soup.find_all('table')
+        if len(tables) <=5:
+            return [None] * 14
+
         industry = soup.find_all(class_='sector')[0].get_text()
         price = soup.find_all(class_='last_price')[0].get_text()
         
@@ -196,3 +200,59 @@ class DataIngestion():
         df.to_csv(path)
         print("Completed scraping .... data located in {}".format(path))
         return path
+
+    def get_insider_trading(self, ticker):
+        """
+        Scrapes secform4.com for insider trading information
+        """
+        # List of common insider positions
+        lst = ['CEO', 'VP', 'CFO', 'Director']
+        
+        if isinstance(ticker, list):
+            ticker_lst = ticker
+        else:
+            ticker_lst = [ticker]
+            
+        df = pd.DataFrame()
+        cik_lst = {i: self.get_cik_number(i) for i in ticker_lst}
+        
+        for tkr, cik in cik_lst.items():
+            sdf = pd.read_html(self.URLS['form4'].format(cik))
+            
+            sdf[2] = sdf[2].drop(['TotalAmount'], axis=1)
+            sdf[3] = sdf[3].drop(['ExercisableExpiration', 'Symnbol'], axis=1).rename(
+                columns={'ConversionPrice': 'AveragePrice'})
+            
+            sdf = pd.concat([sdf[2], sdf[3]]).drop(['ReportedDateTime', 'Filing'], axis=1)
+            sdf = clean_columns(sdf)
+
+            sdf['tran_type'] = sdf['transactiondate'].str.replace(pat=r'(\d+-\d+-\d+)', repl='')
+            sdf['transactiondate'] = pd.to_datetime(sdf['transactiondate'].str.extract(r'(\d+-\d+-\d+)'))
+            sdf['shares_type'] = sdf['sharesowned'].str.replace(r'[^(A-Za-z^)]', '')
+            sdf['sharesowned'] = sdf['sharesowned'].str.replace(r'[(A-Za-z)]', '')
+            
+            sdf = convert_to_float(sdf, ['averageprice', 'sharestraded', 'sharesowned'])
+            sdf['symbol'] = sdf['symbol'].ffill()
+            sdf['cik'] = cik
+            
+            sdf = sdf.rename(columns=form4).sort_values(['date'], ascending=False)
+            sdf['insider_name'] = sdf['insider_pos'].str.replace('(' + '|'.join(lst)+')', '')
+            sdf['insider_pos'] = sdf['insider_pos'].str.extract('(' + '|'.join(lst)+')', expand=False)
+            
+            df = pd.concat(df, sdf)
+
+        return df
+
+    def get_cik_number(self, ticker):
+        """
+        The Central Index Key (CIK) is used on the SEC's computer systems to identify corporations
+        and individual people who have filed disclosure with the SEC.
+        """
+        cik_re = re.compile(r'.*CIK=(\d{10}).*')
+        cik = cik_re.findall(requests.get(self.URLS['sec_cik'].format(ticker), stream=True).text)
+        if len(cik):
+            # Remove trailing 0s
+            cik[0] = int(re.sub('\.[0]*', '.', cik[0]))
+            return cik[0]
+        
+    

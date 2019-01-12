@@ -9,9 +9,12 @@ def strategy_1(path):
     """
     trades = {'long': 'No long position', 'short': 'No short position'}
     
-    useful_columns = ['tickers', 'z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est',
-                             'market_cap', 'z_release_time', 'z_esp', 'z_industry', 'z_price', 'expected_date', 'position']
+    useful_columns = ['tickers', 'z_rank', 'z_eps_diff', 'ew_eps_diff', 'market_cap',
+                      'z_release_time', 'z_esp', 'z_industry', 'z_price',
+                      'expected_date', 'position']
     df = pd.read_csv(path, encoding='ISO-8859-1')
+    df['z_eps_diff'] = df['z_acc_est'] - df['z_curr_eps_est']
+    df['ew_eps_diff'] = df['ew_eps'] - df['ew_curr_eps_est']
     trading_df = pd.DataFrame()
 
     strat1 = ((df['z_esp'] >= 0) &
@@ -20,12 +23,11 @@ def strategy_1(path):
 
     strat2 = ((df['z_rank'] <= 3) &
               (df['z_esp'] >= 0) &
-              (df['z_acc_est'] > df['z_curr_eps_est']) &
-              (df['ew_eps'] > df['ew_curr_eps_est']))
+              (df['z_eps_diff'] > 0) &
+              (df['ew_eps_diff'] > 0))
 
-    short_strat = (df['z_rank'] <= 3 &
-                  (df['z_acc_est'] < df['z_curr_eps_est']) &
-                  (df['ew_eps'] < df['ew_curr_eps_est']))
+    short_strat = ((df['ew_eps_diff'] < 0) &
+                   (df['z_eps_diff'] < 0))
 
     for long_strats in [strat2, strat1]:
         long_df = df.loc[long_strats]
@@ -41,17 +43,23 @@ def strategy_1(path):
         trading_df = pd.concat([trading_df, long_df, short_df])
         if not trading_df.empty:
             break
-       
+
     trading_df = trading_df[useful_columns]    
     trading_df = trading_df.sort_values(['z_rank', 'market_cap'])
-    print(trading_df)
+    
+    print('BMO DataFrame\n')
+    print(trading_df[trading_df['z_release_time'] == 'BMO'])
     print('\n')
+    print('AMC DataFrame\n')
+    print(trading_df[trading_df['z_release_time'] == 'AMC'])    
+    print('\n')
+    
     print(trades)
     import pdb; pdb.set_trace()
 
 
 if __name__ == '__main__':
-    dates_dict = {'2018-Oct-17': True, '2018-Oct-18': False, '2018-Oct-19': False}
+    dates_dict = {'2018-Dec-12': False, '2018-Dec-13': False}
     paths = []
     # Set script to run once a day
     # create arg parser to input date (d) and strat(s) and get training df
