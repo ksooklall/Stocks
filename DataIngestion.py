@@ -73,7 +73,7 @@ class DataIngestion():
         ew_drop_cols = ['sym_mc_size', 'Time', 'multiplier', 'mc_obj', 'eps_consensus_revenue', 'rev1', 'eps', 'consensus']
         z_drop_cols = ['zacks']
         nasdaq_drop_cols = ['quarter_ending']
-        numeric_cols = ['z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est']
+        numeric_cols = ['z_rank', 'z_acc_est', 'z_curr_eps_est', 'ew_eps', 'ew_curr_eps_est', 'z_esp']
 
         df_list = pd.read_html(self.URLS['nasdaq'].format(self.date))
         df = df_list[0]
@@ -120,7 +120,7 @@ class DataIngestion():
         print('Completed zacks scraping')
 
         df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors='coerce')
-        
+        df = df.sort_values(['market_cap'], ascending=False)
         return df
 
     def get_whisper_numbers(self, ticker):
@@ -193,14 +193,6 @@ class DataIngestion():
         df = df.sort_values(['volume'])
 
 
-    def scrape_daily_df(self):
-        print("Begin scraping for {}...".format(self.date))
-        df = self.get_earning_calender()
-        path = 'scraped_data/{}_ew_zack_df.csv'.format(self.date)
-        df.to_csv(path)
-        print("Completed scraping .... data located in {}".format(path))
-        return path
-
     def get_insider_trading(self, ticker):
         """
         Scrapes secform4.com for insider trading information
@@ -255,4 +247,11 @@ class DataIngestion():
             cik[0] = int(re.sub('\.[0]*', '.', cik[0]))
             return cik[0]
         
-    
+
+    def scrape_daily_df(self):
+        print("Begin scraping for {}...".format(self.date))
+        df = self.get_earning_calender()
+        path = 'scraped_data/{}_ew_zack_df.pkl'.format(self.date)
+        df.to_pickle(path)
+        print("Completed scraping .... data located in {}".format(path))
+        return path

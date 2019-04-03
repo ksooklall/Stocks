@@ -12,7 +12,9 @@ def strategy_1(path):
     useful_columns = ['tickers', 'z_rank', 'z_eps_diff', 'ew_eps_diff', 'market_cap',
                       'z_release_time', 'z_esp', 'z_industry', 'z_price',
                       'expected_date', 'position']
-    df = pd.read_csv(path, encoding='ISO-8859-1')
+                      
+    df = pd.read_pickle(path)
+    import pdb; pdb.set_trace()                          
     df['z_eps_diff'] = df['z_acc_est'] - df['z_curr_eps_est']
     df['ew_eps_diff'] = df['ew_eps'] - df['ew_curr_eps_est']
     trading_df = pd.DataFrame()
@@ -59,7 +61,8 @@ def strategy_1(path):
 
 
 if __name__ == '__main__':
-    dates_dict = {'2018-Dec-12': False, '2018-Dec-13': False}
+    dates_dict = {'2019-Mar-27': False, '2019-Mar-28': False}
+    home_path = '/home/ksooklall/workspace/Stocks'
     paths = []
     # Set script to run once a day
     # create arg parser to input date (d) and strat(s) and get training df
@@ -69,12 +72,12 @@ if __name__ == '__main__':
     
     for date, override in dates_dict.items():
     
-        if not os.path.exists('scraped_data/{}_ew_zack_df.csv'.format(date)) or override:
+        if not os.path.exists('{}/scraped_data/{}_ew_zack_df.pkl'.format(home_path, date)) or override:
             di = DataIngestion(tickers=[], date=date)
             path = di.scrape_daily_df()
             paths.append(path)
         else:
-            path = 'scraped_data/{}_ew_zack_df.csv'.format(date)
+            path = '{}/scraped_data/{}_ew_zack_df.pkl'.format(home_path, date)
             paths.append(path)
 
     for path in paths:    

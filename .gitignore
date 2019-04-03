@@ -110,3 +110,9 @@ bitcoin-historical-data/
 checkpoints/
 alphavantage/
 summaries/
+filings/
+scraped_data/
+
+# credentials
+twitter/credentials.py
+
