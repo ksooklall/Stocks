@@ -8,7 +8,7 @@ from tweepy import Stream
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+#from peopletag import users, tags
 
 class TwitterAuthenticator():
 	"""
@@ -62,6 +62,13 @@ class TwitterIngestion():
 
 		return df
 
+	def plotting(self, df):
+		fig, ax = plt.subplots(1, 1, figsize=(16,4))
+		df.plot(x='date', y='nlike', kind='line', label='likes', legend=True, ax=ax)
+		df.plot(x='date', y='nretweet', kind='line', label='retweet', legend=True, ax=ax)
+
+		plt.show()
+
 class TwitterListener(StreamListener):
 	"""
 	Basic listener class
@@ -86,6 +93,8 @@ class TwitterListener(StreamListener):
 class LiveStream():
 	"""
 	Streaming live tweets locally
+	tweet_analyzer = TweetAnalyzer()
+
 	"""
 	def __init__(self):
 		self.auth  = TwitterAuthenticator()
@@ -98,22 +107,22 @@ class LiveStream():
 
 
 if __name__ == '__main__':
-	hash_tag = ['LYFT']
-	user = 'jimcramer'
+	#hash_tag = ['LYFT']
+	#user = 'jimcramer'
+	import pdb; pdb.set_trace()
+	users= {'hedge_fund_manager': 'Carl_C_Icahn', 'hedge_fund_manager': 'PeterCWarren', 'hedge_fund_manag    er': 'BergenCapital', 'hedge_fund_manager': 'mark_dow', 'hedge_fund_manager': 'lexvandam', 'hedge_fun    d_manager': 'timseymour'} 
 	
-	twitter_client = TwitterClient(user)
-	tweet_analyzer = TweetAnalyzer()
+	df = pd.DataFrame()
+	for title, user in users.items():
+		twitter_client = TwitterIngestion(user)
+		api = twitter_client.get_twitter_client_api()
+		print('Getting {} tweets'.format(user))
+		tweets = api.user_timeline(screen_name=user, count=20)
+		tdf = twitter_client.tweets_to_df(tweets)	
+		tdf['user'] = user
+		df = pd.concat([df, tdf])
 
-	api = twitter_client.get_twitter_client_api()
-	tweets = api.user_timeline(screen_name=user, count=200)
-	df = tweet_analyzer.tweets_to_df(tweets)	
-
-	fig, ax = plt.subplots(1, 1, figsize=(16,4))
-	df.plot(x='date', y='nlike', kind='line', label='likes', legend=True, ax=ax)
-	df.plot(x='date', y='nretweet', kind='line', label='retweet', legend=True, ax=ax)
-
-	plt.show()
 	print(df)
-	
+	import pdb; pdb.set_trace()
 	#twitter = TwitterStreamer()
 	#twitter.stream_tweets('', hash_tag)

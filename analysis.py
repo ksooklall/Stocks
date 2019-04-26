@@ -14,7 +14,6 @@ def strategy_1(path):
                       'expected_date', 'position']
                       
     df = pd.read_pickle(path)
-    import pdb; pdb.set_trace()                          
     df['z_eps_diff'] = df['z_acc_est'] - df['z_curr_eps_est']
     df['ew_eps_diff'] = df['ew_eps'] - df['ew_curr_eps_est']
     trading_df = pd.DataFrame()
@@ -47,21 +46,33 @@ def strategy_1(path):
             break
 
     trading_df = trading_df[useful_columns]    
-    trading_df = trading_df.sort_values(['z_rank', 'market_cap'])
-    
+    trading_df = trading_df.sort_values(['market_cap'], ascending=False)
+   
+    amc = trading_df[trading_df['z_release_time'] == 'AMC']
+    bmo = trading_df[trading_df['z_release_time'] == 'BMO']
     print('BMO DataFrame\n')
-    print(trading_df[trading_df['z_release_time'] == 'BMO'])
+    print(bmo)
     print('\n')
     print('AMC DataFrame\n')
-    print(trading_df[trading_df['z_release_time'] == 'AMC'])    
+    print(amc) 
     print('\n')
     
     print(trades)
     import pdb; pdb.set_trace()
 
+def weekly_analysis(paths):
+	cols = ['expected_date', 'consensus_eps', 'analysts', 'tickers', 'market_cap', 'ew_revenue', 'ew_curr_eps_est', 'ew_eps', 'z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_rank', 'z_industry', 'z_price']
+	industry_oi = ['Internet - Commerce', 'Computer - Software', 'Internet - Services', 'Internet - Software']
+	df = pd.concat([pd.read_pickle(i) for i in paths])
+	df = df[cols]
+	df['expected_date'] = df['expected_date'].map(pd.to_datetime)
+	df = df..sort_values(['expected_date', 'market_cap'], ascending=True)
+
+	idf = df[df['z_industry'].isin(industry_oi)]
+	import pdb; pdb.set_trace()
 
 if __name__ == '__main__':
-    dates_dict = {'2019-Mar-27': False, '2019-Mar-28': False}
+    dates_dict = {'2019-Apr-29': False, '2019-Apr-30': False, '2019-May-01': False, '2019-May-02': False, '2019-May-03': False}
     home_path = '/home/ksooklall/workspace/Stocks'
     paths = []
     # Set script to run once a day
@@ -79,6 +90,8 @@ if __name__ == '__main__':
         else:
             path = '{}/scraped_data/{}_ew_zack_df.pkl'.format(home_path, date)
             paths.append(path)
+
+    weekly_analysis(paths)
 
     for path in paths:    
         strategy_1(path)
