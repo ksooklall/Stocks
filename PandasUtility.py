@@ -15,6 +15,9 @@ def clean_columns(df):
     """
     df.columns = df.columns.str.lower().str.replace(' ', '_')
     return df
+
+def convert_mb_float(df, column, mapping_dict={'M': 1e6, 'B': 1e9}):
+	pass
     
 def preprocess_df(df, float_cols, **kwrgs):
 	df = clean_columns(df)
