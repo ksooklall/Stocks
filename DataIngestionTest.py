@@ -31,7 +31,7 @@ def test_insider_trading(klass):
 
 
 def test_get_yahoo_statistics(klass):
-	df = klass.get_yahoo_statistics(TEST_TICKER)
+	df = klass.get_yahoo_statistics()
 	assert isinstance(df, pd.DataFrame)
 	assert df.shape == (59, 1)
 
@@ -50,7 +50,7 @@ def test_get_hl52_stocks(klass):
 
 
 if __name__ == '__main__':
-	klass = di(date=TEST_DATE)
+	klass = di(tickers=[TEST_TICKER], date=TEST_DATE)
 	#test_get_rsi_frame(klass)
 	#test_insider_trading(klass)
 	test_whisper_numbers(klass)

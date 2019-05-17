@@ -32,7 +32,7 @@ import pandas as pd
 import requests
 import urllib3
 import ssl
-from PandasUtility import preprocess_df
+from PandasUtility import preprocess_df, clean_columns, convert_float, convert_kmb_float
 from ColumnRenames import form4, nasdaq
 import re
 
@@ -56,9 +56,14 @@ class DataIngestion():
 	def __init__(self, date, tickers=None, api_key=None):
 		# Date format: Y-m-d, dtype:str ex: '2018-Aug-06'
 		self.api_key = api_key
+		self.tickers = tickers
 		self.date = date
 
-	   
+
+	def set_tickers(self, tickers):
+		self.tickers = tickers
+
+
 	def get_earning_calender(self):
 		market_exp = {'M': 1e6, 'B': 1e9}
 		ew_drop_cols = ['sym_mc_size', 'Time', 'multiplier', 'mc_obj', 'eps_consensus_revenue', 'rev1', 'eps', 'consensus']
@@ -160,14 +165,40 @@ class DataIngestion():
 		return [esp, acc_est, curr_eps_est, earning_date, forward_pe, peg_ratio, z_rank, ind_rank, sector_rank, growth, momentum, vgm, industry, price]
 		
 
-	def get_yahoo_statistics(self, ticker):
-		url = 'https://finance.yahoo.com/quote/{0}/key-statistics?p={0}'.format(ticker)
-		ldf = pd.read_html(url)
-		df = pd.concat([i for i in ldf]).set_index([0], drop=True).rename(columns={1: ticker})
+	def get_yahoo_statistics(self):
+		"""
+		 Scrapes yahoo finance statistical page based on the list of tickers
+		"""
+		df = pd.DataFrame()		
+		for ticker in self.tickers:
+			url = 'https://finance.yahoo.com/quote/{0}/key-statistics?p={0}'.format(ticker)
+			ldf = pd.read_html(url)
+			tdf = pd.concat([i for i in ldf]).set_index([0], drop=True).rename(columns={1: ticker}).T
+			df = pd.concat([df, tdf], sort=False)
+		
+		df = clean_columns(df)
+		df[['52_low', '52_high']] = df['52_week_range'].str.replace(' ', '').str.split('-', expand=True).astype(float)
+		df = df.drop(['52_week_range'], axis=1)
+
+		pct_cols = ['%_held_by_insiders_1', '%_held_by_institutions_1', '52-week_change_3', 'return_on_assets_(ttm)', 'return_on_equity_(ttm)', 's&p500_52-week_change_3', 'short_%_of_shares_outstanding_(apr_30,_2019)_4', 'payout_ratio_4', 'operating_margin_(ttm)', 'profit_margin', 'short_%_of_float_(apr_30,_2019)_4', 'forward_annual_dividend_yield_4', 'trailing_annual_dividend_yield_3', 'payout_ratio_4', 'expense_ratio_(net)', 'quarterly_earnings_growth_(yoy)', 'yield', 'ytd_return', 'quarterly_revenue_growth_(yoy)']
+
+		kmb_cols = ['market_cap_(intraday)_5', 'enterprise_value_3', 'revenue_(ttm)', 'gross_profit_(ttm)', 'ebitda', 'net_income_avi_to_common_(ttm)', 'total_cash_(mrq)', 'total_debt_(mrq)', 'operating_cash_flow_(ttm)', 'levered_free_cash_flow_(ttm)', 'avg_vol_(3_month)_3', 'avg_vol_(10_day)_3', 'shares_outstanding_5', 'float', 'shares_short_(apr_30,_2019)_4', 'shares_short_(prior_month_mar_29,_2019)_4', 'net_assets']
+
+		date_cols = ['fiscal_year_ends', 'most_recent_quarter_(mrq)', 'last_split_date_3', 'dividend_date_3', 'ex-dividend_date_4', 'inception_date']
+
+		unused = ['bid', 'ask', 'last_split_factor_(new_per_old)_2', "day's_range"]
+		
+		float_cols = list(set(df.columns)-set(kmb_cols)-set(pct_cols)-set(date_cols)-set(unused))
+		df = convert_float(df, pct_cols, to_replace='%')
+		df = convert_kmb_float(df, kmb_cols)
+		df[float_cols] = df[float_cols].apply(pd.to_numeric)	
 		return df
 
 
 	def get_hl52_stocks(self):
+		"""
+		Scrapes nasdaq page for stocks that hit 52 week low/high
+		"""
 		print('Getting 52 week low stocks ....')
 		ldf = pd.read_html('https://www.nasdaq.com/aspx/52-week-high-low.aspx?exchange=NASDAQ&status=LOW')[0]
 		ldf = ldf[ldf['Symbol'].str.len() < 5]
@@ -177,6 +208,7 @@ class DataIngestion():
  
 		ldf = preprocess_df(ldf, float_cols=['new_low', 'previous_low', 'high'])
 		hdf = preprocess_df(hdf, float_cols=['new_high', 'previous_high', 'previous_low'])
+
 		return [ldf, hdf]
 
 
@@ -225,7 +257,7 @@ class DataIngestion():
 			sdf['shares_type'] = sdf['sharesowned'].str.replace(r'[^(A-Za-z^)]', '')
 			sdf['sharesowned'] = sdf['sharesowned'].str.replace(r'[(A-Za-z)]', '')
 			
-			sdf = convert_to_float(sdf, ['averageprice', 'sharestraded', 'sharesowned'])
+			sdf = convert_float(sdf, ['averageprice', 'sharestraded', 'sharesowned'])
 			sdf['symbol'] = sdf['symbol'].ffill()
 			sdf['cik'] = cik
 			
