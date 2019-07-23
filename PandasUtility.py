@@ -21,7 +21,7 @@ def clean_columns(df):
 def convert_kmb_float(df, columns, mapping_dict={'K': 1e3, 'M': 1e6, 'B': 1e9}):
 	# Convert columns containg K - Thousand, M - Million or B - Billion at the end to float
 	for col in columns:
-		df[col] = df[col].str.replace(' ','').str.upper().str.replace('K|B|M', '').astype(float).mul(df[col].str.get(-1).map(mapping_dict))
+		df[col] = df[col].str.replace(' ','').str.upper().str.replace('K|B|M', '').astype(float).mul(df[col].str.upper().str.get(-1).map(mapping_dict))
 	return df
 
  
