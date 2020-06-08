@@ -17,7 +17,7 @@ Blue Chip Stocks:
 'https://www.nasdaq.com/screening/companies-by-industry.aspx?sortname=marketcap&sorttype=1&exchange=NASDAQ'
 
 Earning calender:
-https://www.nasdaq.com/earnings/earnings-calendar.aspx?date=2018-Aug-06
+https://www.nasdaq.com/market-activity/earnings?date=2020-Jun-08
 
 RSI:
 https://www.stockmonitor.com/stock-screener/rsi-crossed-above-70/
@@ -41,7 +41,7 @@ class DataIngestion():
 	URLS = {
 		'ew': 'https://www.earningswhispers.com/stocks/',
 		'zacks': 'https://www.zacks.com/stock/quote/{0}?q={0}',
-		'nasdaq': 'https://www.nasdaq.com/earnings/earnings-calendar.aspx?date={}',
+		'nasdaq': 'https://www.nasdaq.com/market-activity/earnings?date={0}', # NO LONGER VALID
 		'rsi': 'https://www.stockmonitor.com/stock-screener/rsi-crossed-above-70/',
 		'reuters_pg1': 'https://www.reuters.com/finance/stocks/insider-trading/{}.N',
 		'reuters_pg2': 'https://www.reuters.com/finance/stocks/insider-trading/{}.N?symbol=&name=&pn=2&sortDir=&sortBy=',
@@ -49,7 +49,8 @@ class DataIngestion():
 		'form4': 'https://www.secform4.com/insider-trading/{}.htm',
 		'yahoo_statistics': 'https://finance.yahoo.com/quote/{0}/key-statistics?p={0}',
 		'low_52': 'https://www.nasdaq.com/aspx/52-week-high-low.aspx?exchange=NASDAQ&status=LOW',
-		'high_52': 'https://www.nasdaq.com/aspx/52-week-high-low.aspx?exchange=NASDAQ&status=HIGH'
+		'high_52': 'https://www.nasdaq.com/aspx/52-week-high-low.aspx?exchange=NASDAQ&status=HIGH',
+		'yahoo': 'https://finance.yahoo.com/calendar/earnings?day={}'
 		}
 
 	MARKET_EXP = {'M': 1e6, 'B': 1e9}
@@ -76,7 +77,7 @@ class DataIngestion():
 		return df
 
 
-	def get_earning_calender(self):
+	def get_earning_calender_nasdaq(self):
 		"""
 		Scrape nasdaq for all stocks that will be releaseing Q4
 		"""
@@ -113,6 +114,19 @@ class DataIngestion():
 		print('Completed nasdaq scraping')
 		self.set_tickers(df['tickers'].tolist())
 		return df
+
+
+	def get_earning_calender_yahoo(self):
+		df_list = pd.read_html(self.URLS['yahoo'].format(self.date))
+
+		df = df_list[0]
+		if df.empty:
+			return df
+
+		df = df.loc[:, df.columns[:4]].rename(columns={'Symbol': 'tickers'})
+		df = clean_columns(df)
+		return df
+
 
 	def get_whisper_numbers(self, df=None):
 		print('Starting earning whisper scraping')
@@ -315,9 +329,9 @@ class DataIngestion():
 		
 
 	def scrape_daily_df(self):
-		print("Begin scraping for {}...".format(self.date))
-		df = self.get_earning_calender()
-		path = 'scraped_data/{}_ew_zack_df.pkl'.format(self.date)
-		df.to_pickle(path)
+		print("Scraping for {}...".format(self.date))
+		df = self.get_earning_calender_yahoo()
+		path = 'scraped_data/{}_ew_zack_df.csv'.format(self.date)
+		df.to_csv(path)
 		print("Completed scraping .... data located in {}".format(path))
 		return path

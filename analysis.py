@@ -15,7 +15,7 @@ def strategy_1(path):
 					  'z_release_time', 'z_esp', 'z_industry', 'z_price',
 					  'expected_date', 'position']
 					  
-	df = pd.read_pickle(path)
+	df = pd.read_csv(path)
 	df['z_eps_diff'] = df['z_acc_est'] - df['z_curr_eps_est']
 	df['ew_eps_diff'] = df['ew_eps'] - df['ew_curr_eps_est']
 	trading_df = pd.DataFrame()
@@ -65,7 +65,7 @@ def strategy_1(path):
 def weekly_analysis(paths):
 	cols = ['expected_date', 'consensus_eps', 'analysts', 'tickers', 'market_cap', 'ew_revenue', 'ew_curr_eps_est', 'ew_eps', 'z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_rank', 'z_industry', 'z_price']
 	industry_oi = ['Internet - Commerce', 'Computer - Software', 'Internet - Services', 'Internet - Software']
-	df = pd.concat([pd.read_pickle(i) for i in paths])
+	df = pd.concat([pd.read_csv(i) for i in paths])
 	df = df[cols]
 	df['expected_date'] = df['expected_date'].map(pd.to_datetime)
 	df = df.sort_values(['expected_date', 'market_cap'], ascending=True)
@@ -75,7 +75,6 @@ def weekly_analysis(paths):
 
 
 def get_zacks_ew_data(dates_dict):
-	dates_dict = {'2019-May-22': False}
 	home_path = '/home/ksooklall/workspace/Stocks'
 	paths = []
 	# Set script to run once a day
@@ -147,6 +146,8 @@ def statistical_analysis():
 	import pdb; pdb.set_trace()
 
 if __name__ == '__main__':
-	statistical_analysis()
+	dates_dict = {'2020-06-08': True, '2020-06-09': True, '2020-06-10': True, '2020-06-11': True, '2020-06-12': True}
+	get_zacks_ew_data(dates_dict)
+	#statistical_analysis()
 
 
