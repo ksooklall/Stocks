@@ -71,7 +71,6 @@ def weekly_analysis(paths):
 	df = df.sort_values(['expected_date', 'market_cap'], ascending=True)
 	df = df[df['market_cap'].notnull()]
 	idf = df[df['z_industry'].isin(industry_oi)]
-	import pdb; pdb.set_trace()
 
 
 def get_zacks_ew_data(dates_dict):
@@ -143,11 +142,18 @@ def statistical_analysis():
 	ultra_mask = high_mask & (df['returnOnEquity'].between(17, 20))
 
 	df[(df['forwardPE'] < 50) & (df['pbRatio'] > 1) & (df['pegRatio'] < 1) & (df['returnOnEquity'] > 17) & (df['debtToEquity'] < 2) & (df['currentRatio'].between(1, 2))]
-	import pdb; pdb.set_trace()
+
+
+def testing_di(dates):
+	data_in = di(date='2020-06-08')
+	df = data_in.get_earning_calender_yahoo()
+	df = data_in.get_whisper_numbers(df)	
+
 
 if __name__ == '__main__':
 	dates_dict = {'2020-06-08': True, '2020-06-09': True, '2020-06-10': True, '2020-06-11': True, '2020-06-12': True}
-	get_zacks_ew_data(dates_dict)
+	testing_di(dates_dict)
+	#get_zacks_ew_data(dates_dict)
 	#statistical_analysis()
 
 

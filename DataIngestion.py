@@ -328,10 +328,11 @@ class DataIngestion():
 			return cik[0]
 		
 
-	def scrape_daily_df(self):
+	def scrape_daily_df(self, save=False):
 		print("Scraping for {}...".format(self.date))
 		df = self.get_earning_calender_yahoo()
 		path = 'scraped_data/{}_ew_zack_df.csv'.format(self.date)
-		df.to_csv(path, index=False)
+		if save:
+			df.to_csv(path, index=False)
 		print("Completed scraping .... data located in {}".format(path))
-		return path
+		return (df, path)
