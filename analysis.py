@@ -2,7 +2,8 @@ import pandas as pd
 import os
 from DataIngestion import DataIngestion as di
 pd.set_option('display.max_rows', 200)
-
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
 
 def strategy_1(path):
 	"""
@@ -49,7 +50,7 @@ def strategy_1(path):
 
 	trading_df = trading_df[useful_columns]	
 	trading_df = trading_df.sort_values(['market_cap'], ascending=False)
-   
+
 	amc = trading_df[trading_df['z_release_time'] == 'AMC']
 	bmo = trading_df[trading_df['z_release_time'] == 'BMO']
 	print('BMO DataFrame\n')
@@ -60,7 +61,6 @@ def strategy_1(path):
 	print('\n')
 	
 	print(trades)
-	#import pdb; pdb.set_trace()
 
 def weekly_analysis(paths):
 	cols = ['expected_date', 'consensus_eps', 'analysts', 'tickers', 'market_cap', 'ew_revenue', 'ew_curr_eps_est', 'ew_eps', 'z_esp', 'z_acc_est', 'z_curr_eps_est', 'z_release_time', 'z_rank', 'z_industry', 'z_price']
@@ -141,13 +141,15 @@ def statistical_analysis():
 	high_mask = medium_mask & (df['pegRatio'] < 1)
 	ultra_mask = high_mask & (df['returnOnEquity'].between(17, 20))
 
-	df[(df['forwardPE'] < 50) & (df['pbRatio'] > 1) & (df['pegRatio'] < 1) & (df['returnOnEquity'] > 17) & (df['debtToEquity'] < 2) & (df['currentRatio'].between(1, 2))]
+	df = df[(df['forwardPE'] < 50) & (df['pbRatio'] > 1) & (df['pegRatio'] < 1) & (df['returnOnEquity'] > 17)
+			& (df['debtToEquity'] < 2) & (df['currentRatio'].between(1, 2))]
 
 
 def testing_di(dates):
-	data_in = di(date='2020-06-08')
+	data_in = di(date='2020-06-15')
 	df = data_in.get_earning_calender_yahoo()
-	df = data_in.get_whisper_numbers(df)	
+	df = data_in.get_zacks_numbers(df)
+	tests = data_in.get_yahoo_statistics()
 
 
 if __name__ == '__main__':
