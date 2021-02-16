@@ -36,4 +36,3 @@ def preprocess_df(df, float_cols, **kwrgs):
     df = clean_columns(df)
     df = convert_float(df, float_cols, **kwrgs)
     return df
-
