@@ -146,7 +146,7 @@ def statistical_analysis():
 
 
 def testing_di(dates):
-	data_in = di(date='2020-06-15')
+	data_in = di(date='2020-06-16')
 	df = data_in.get_earning_calender_yahoo()
 	df = data_in.get_zacks_numbers(df)
 	tests = data_in.get_yahoo_statistics()

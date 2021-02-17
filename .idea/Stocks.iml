@@ -5,8 +5,20 @@
     <orderEntry type="jdk" jdkName="Python 3.6 (tfenv)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
+<<<<<<< HEAD
+=======
+  <component name="PackageRequirementsSettings">
+    <option name="requirementsPath" value="" />
+  </component>
+>>>>>>> 653b416a279a0d7f8c096a48196291d2cae08439
   <component name="PyDocumentationSettings">
     <option name="format" value="PLAIN" />
     <option name="myDocStringFormat" value="Plain" />
   </component>
+<<<<<<< HEAD
+=======
+  <component name="TestRunnerService">
+    <option name="PROJECT_TEST_RUNNER" value="pytest" />
+  </component>
+>>>>>>> 653b416a279a0d7f8c096a48196291d2cae08439
 </module>

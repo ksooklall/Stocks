@@ -172,7 +172,7 @@ class DataIngestion:
 			ctx.verify_mode = ssl.CERT_NONE
 
 			http = urllib3.PoolManager()
-			res = http.request('GET', self.URLS['zacks'].format(ticker))
+			res = http.request('GET', self.URLS['zacks'].format(ticker), verify=False)
 			soup = bs(res.data.decode('utf-8'))
 			
 			tables = soup.find_all('table')
